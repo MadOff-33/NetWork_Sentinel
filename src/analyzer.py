@@ -6,7 +6,6 @@ import os
 
 # --- CORRECTIF PYINSTALLER (CRITIQUE) ---
 # Redirige les flux standards vers null si manquants (mode --noconsole)
-# Cela empêche le crash de speedtest-cli à l'importation.
 if sys.stdin is None:
     sys.stdin = open(os.devnull, 'r')
 if sys.stdout is None:
@@ -15,16 +14,23 @@ if sys.stderr is None:
     sys.stderr = open(os.devnull, 'w')
 # ----------------------------------------
 
-import speedtest
-import pandas as pd
 import time
 import urllib.request
 from datetime import datetime
+
+import pandas as pd
 from ping3 import ping
 
+from src.logger import get_logger
+
+log = get_logger("analyzer")
+
+
 class NetworkAnalyzer:
-    def __init__(self, history_file="data/network_history.csv"):
+    def __init__(self, history_file="data/network_history.csv", download_size_mb=10, upload_size_mb=5):
         self.history_file = history_file
+        self.download_size_mb = download_size_mb
+        self.upload_size_mb = upload_size_mb
 
     def run_performance_test(self):
         results = {
@@ -36,34 +42,35 @@ class NetworkAnalyzer:
         try:
             latency = ping('8.8.8.8', unit='ms')
             results['ping_ms'] = round(latency, 2) if latency else 0
-        except: pass
+        except OSError as e:
+            log.warning("Ping impossible : %s", e)
 
-        # 2. Download (Custom method)
+        # 2. Download
         results['download_mbps'] = self._custom_download_test()
-        
-        # 3. Upload (Custom method)
+
+        # 3. Upload
         results['upload_mbps'] = self._custom_upload_test()
 
         self._save_to_history(results)
         return results
 
     def _custom_download_test(self):
-        url = "http://speedtest.tele2.net/10MB.zip"
-        file_size_mb = 10
+        url = f"http://speedtest.tele2.net/{self.download_size_mb}MB.zip"
         try:
             start = time.time()
             with urllib.request.urlopen(url, timeout=15) as response:
                 _ = response.read()
             duration = time.time() - start
             if duration > 0:
-                return round((file_size_mb * 8) / duration, 2)
+                return round((self.download_size_mb * 8) / duration, 2)
             return 0
-        except: return 0
+        except (OSError, urllib.error.URLError) as e:
+            log.warning("Test download echoue : %s", e)
+            return 0
 
     def _custom_upload_test(self):
         url = "http://speedtest.tele2.net/upload.php"
-        data_size_mb = 5
-        data = b'0' * (1024 * 1024 * data_size_mb)
+        data = b'0' * (1024 * 1024 * self.upload_size_mb)
         try:
             start = time.time()
             req = urllib.request.Request(url, data=data, method='POST')
@@ -71,17 +78,18 @@ class NetworkAnalyzer:
                 _ = f.read()
             duration = time.time() - start
             if duration > 0:
-                return round((data_size_mb * 8) / duration, 2)
+                return round((self.upload_size_mb * 8) / duration, 2)
             return 0
-        except: return 0
+        except (OSError, urllib.error.URLError) as e:
+            log.warning("Test upload echoue : %s", e)
+            return 0
 
     def _save_to_history(self, data):
-        # Création dossier si inexistant
-        os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
-        
-        df = pd.DataFrame([data])
-        mode = 'a' if os.path.exists(self.history_file) else 'w'
-        header = not os.path.exists(self.history_file)
         try:
+            os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
+            df = pd.DataFrame([data])
+            header = not os.path.exists(self.history_file)
+            mode = 'w' if header else 'a'
             df.to_csv(self.history_file, mode=mode, header=header, index=False)
-        except: pass
+        except OSError as e:
+            log.error("Sauvegarde historique impossible : %s", e)

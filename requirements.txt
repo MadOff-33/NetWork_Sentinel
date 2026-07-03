@@ -1,12 +1,10 @@
-customtkinter
-matplotlib
-pandas
-scapy
-speedtest-cli
-ping3
-pywin32
-winshell
-packaging
-pyinstaller
+# Dependances du CLIENT (PC) — l'interface graphique qui pilote le serveur NAS.
+# Installation : pip install -r requirements.txt
+customtkinter>=5.2
+matplotlib>=3.8
+pandas>=2.0
+requests>=2.31
 
-# pip install -r requirements.txt pour lancer l'installation dev
+# Gestion du raccourci "Lancer au demarrage" (Windows uniquement)
+pywin32>=306; sys_platform == "win32"
+winshell>=0.6; sys_platform == "win32"

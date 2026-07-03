@@ -1,8 +1,8 @@
-flask
-scapy
-pandas
-speedtest-cli
-ping3
-colorama
-tabulate
-requests
+# Dependances du SERVEUR (conteneur Docker sur le NAS).
+flask>=3.0
+scapy>=2.5
+pandas>=2.0
+ping3>=4.0
+colorama>=0.4
+tabulate>=0.9
+requests>=2.31

@@ -1,0 +1,19 @@
+# Dependances de developpement et de test.
+# Installation : pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+# Tests
+pytest>=8.0
+flask>=3.0            # test de l'API serveur (server/server.py)
+
+# Dependances des modules partages src/ utilises par le serveur
+scapy>=2.5
+ping3>=4.0
+colorama>=0.4
+tabulate>=0.9
+
+# Qualite
+ruff>=0.4
+
+# Build de l'exe client (optionnel)
+pyinstaller>=6.0

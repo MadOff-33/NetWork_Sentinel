@@ -37,7 +37,7 @@ class NetworkScanner:
             devices_list = []
 
             # 5. Traitement des réponses
-            for sent, received in answered_list:
+            for _sent, received in answered_list:
                 device = {
                     "ip": received.psrc,
                     "mac": received.hwsrc

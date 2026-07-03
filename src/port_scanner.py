@@ -35,7 +35,8 @@ class PortScanner:
                 if s.connect_ex((ip, port)) == 0:
                     open_ports.append(port)
                 s.close()
-            except: pass
+            except OSError:
+                pass
         return open_ports
 
     def scan_device(self, ip):
@@ -43,13 +44,13 @@ class PortScanner:
         results_text = []
         # On réutilise le quick_scan pour trouver les ports, puis on formate le texte
         open_ports = self.quick_scan(ip)
-        
+
         if not open_ports:
             return []
 
         for port in open_ports:
             info = self.port_info.get(port, {"name": "Inconnu", "desc": "Non identifié", "risk": 0})
-            
+
             # Emoji selon le risque
             if info['risk'] == 2: icon = "⛔ DANGER"
             elif info['risk'] == 1: icon = "⚠️ ATTENTION"
@@ -62,14 +63,14 @@ class PortScanner:
                 f"   {'-'*30}"
             )
             results_text.append(message)
-                
+
         return results_text
 
     def assess_risk(self, open_ports):
         """Calcule la couleur du bouton selon les ports trouvés."""
         max_risk = 0
         details = []
-        
+
         for p in open_ports:
             info = self.port_info.get(p, {"risk": 0, "name": "Inconnu"})
             if info["risk"] > max_risk:
@@ -78,7 +79,7 @@ class PortScanner:
 
         if not open_ports:
             return "green", "Sécurisé", 0
-        
+
         if max_risk == 2:
             return "#ff4444", f"DANGER: {','.join(details)}", 2 # Rouge
         elif max_risk == 1:

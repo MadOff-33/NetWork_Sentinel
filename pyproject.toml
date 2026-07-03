@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 160
+target-version = "py39"
+exclude = [".venv", "build", "dist", "docs"]
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, B: bugbear (pieges courants)
+select = ["E", "W", "F", "B"]
+# E501 gere par line-length ; E402 tolere (correctif PyInstaller avant imports)
+ignore = ["E402", "E701", "E702"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

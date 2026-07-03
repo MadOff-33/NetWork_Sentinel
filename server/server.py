@@ -79,7 +79,8 @@ def get_mac_vendor(mac):
             vendor = r.text.strip()
             VENDOR_CACHE[mac] = vendor
             return vendor
-    except: pass
+    except requests.RequestException:
+        pass
     return ""
 
 def resolve_details(dev):
@@ -87,7 +88,7 @@ def resolve_details(dev):
     name = dev.get('name', '?')
     if name in ["?", "Inconnu"]:
         try: name = socket.gethostbyaddr(ip)[0]
-        except: name = "?"
+        except OSError: name = "?"
     if name == "?":
         vendor = get_mac_vendor(mac)
         name = f"({vendor})" if vendor else "Inconnu"
@@ -109,43 +110,44 @@ def trim_history(max_rows=20000, keep_rows=10000):
 
 def background_scan_loop():
     if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
-    
+
     # Chargement config initiale
     interval = 30
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE) as f: 
+            with open(CONFIG_FILE) as f:
                 cfg = json.load(f)
                 interval = cfg.get("scan_interval", 30)
-        except: pass
-    
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"[ERREUR] Config illisible : {e}")
+
     alerted_macs = set()
 
     while True:
         try:
             print(f"[INFO] Scan... ({interval}s)")
-            
+
             # 1. SCAN
             scanner = NetworkScanner(get_ip_range())
             scan_res = scanner.scan()
             enriched_res = [resolve_details(d) for d in scan_res]
-            
+
             # 2. SECURITÉ
             sec = SecurityMonitor()
             new_devs, known_devs = sec.analyze_intrusions(enriched_res)
-            
+
             # 3. PERF (Ping à chaque tour, Speedtest moins souvent)
             # On initialise les valeurs par défaut
             perf = current_state.get("performance", {"ping_ms": 0, "download_mbps": 0, "upload_mbps": 0})
-            
+
             # Logique : Ping toutes les 30s, Speedtest toutes les 5 minutes (300s)
             now = int(time.time())
-            if now % 300 < interval + 5: 
+            if now % 300 < interval + 5:
                 try:
                     analyzer = NetworkAnalyzer()
                     new_perf = analyzer.run_performance_test()
                     if new_perf: perf = new_perf
-                    
+
                     # Sauvegarde CSV
                     df = pd.DataFrame([perf])
                     df['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -153,7 +155,7 @@ def background_scan_loop():
                     df.to_csv(HISTORY_FILE, mode='a', header=hdr, index=False)
                     trim_history()
                 except Exception as e: print(f"Perf Error: {e}")
-            
+
             # 4. EMAIL
             if new_devs and os.path.exists(CONFIG_FILE):
                 try:
@@ -161,12 +163,12 @@ def background_scan_loop():
                     if conf.get("email_enabled"):
                         # On filtre : on ne garde que ceux qui ne sont PAS dans la mémoire
                         to_notify = [d for d in new_devs if d['mac'] not in alerted_macs]
-                        
+
                         if to_notify:
                             notifier = EmailNotifier()
                             notifier.config = conf
                             notifier.send_alert(to_notify)
-                            
+
                             # On mémorise les MACs pour ne plus les spammer tant que le serveur tourne
                             for d in to_notify:
                                 alerted_macs.add(d['mac'])
@@ -177,12 +179,13 @@ def background_scan_loop():
             current_state["alerts"] = new_devs
             current_state["performance"] = perf
             current_state["last_update"] = time.strftime("%H:%M:%S")
-            
+
             # Mise à jour intervalle dynamique
             if os.path.exists(CONFIG_FILE):
                 try:
                     with open(CONFIG_FILE) as f: interval = json.load(f).get("scan_interval", 30)
-                except: pass
+                except (OSError, json.JSONDecodeError):
+                    pass
 
         except Exception as e:
             print(f"[ERREUR] {e}")
@@ -230,7 +233,8 @@ def scan_now():
 def get_history():
     if os.path.exists(HISTORY_FILE):
         try: return pd.read_csv(HISTORY_FILE).tail(30).to_json(orient="records")
-        except: pass
+        except (OSError, pd.errors.ParserError) as e:
+            print(f"[ERREUR] Historique illisible : {e}")
     return jsonify([])
 
 if __name__ == '__main__':

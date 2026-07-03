@@ -46,7 +46,8 @@ class NetworkSentinelApp(ctk.CTk):
 
         ctk.CTkLabel(self.sidebar, text="NETWORK\nSENTINEL NAS", font=("Arial", 24, "bold"), text_color="#00aaff").pack(pady=(30, 20))
 
-        self.btn_scan = ctk.CTkButton(self.sidebar, text="🔄 ACTUALISER", font=("Arial", 14, "bold"), height=45, fg_color="#0066cc", command=self.run_audit_thread)
+        self.btn_scan = ctk.CTkButton(self.sidebar, text="🔄 ACTUALISER", font=("Arial", 14, "bold"),
+                                      height=45, fg_color="#0066cc", command=self.run_audit_thread)
         self.btn_scan.pack(pady=15, padx=20, fill="x")
 
         self.btn_scan_now = ctk.CTkButton(self.sidebar, text="🔎 SCAN NAS IMMÉDIAT", height=35, fg_color="#444", command=self.request_nas_scan)
@@ -227,7 +228,8 @@ class NetworkSentinelApp(ctk.CTk):
 
             if is_new:
                 ctk.CTkButton(row, text="BLOQUER", fg_color="#cc0000", width=80,
-                              command=lambda m=dev['mac']: messagebox.showwarning("Bloquer", f"Ajoutez {m} à la liste noire de votre Box.")).pack(side="right", padx=5)
+                              command=lambda m=dev['mac']: messagebox.showwarning(
+                                  "Bloquer", f"Ajoutez {m} à la liste noire de votre Box.")).pack(side="right", padx=5)
                 ctk.CTkButton(row, text="VALIDER", fg_color="green", width=80,
                               command=lambda m=dev['mac']: self.authorize_device(m)).pack(side="right", padx=5)
 

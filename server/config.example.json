@@ -1,0 +1,9 @@
+{
+    "scan_interval": 30,
+    "ip_range": "",
+    "email_enabled": false,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "votre.email@gmail.com",
+    "alert_emails": ["destinataire@example.com"]
+}

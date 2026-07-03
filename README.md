@@ -121,8 +121,9 @@ ISCC installer/installer_standalone.iss                # -> installer/output/Net
 ```
 Lance le serveur en interne sur `127.0.0.1` + l'interface. Voir
 [main_standalone.py](main_standalone.py). **Nécessite Npcap et les droits
-administrateur** (scan ARP local). L'installeur propose Npcap s'il est absent
-(placez son installeur dans `installer/redist/npcap-installer.exe` pour le
-bundler).
+administrateur** (scan ARP local). L'installeur propose Npcap s'il est absent,
+ou l'installe en silencieux s'il est bundlé — voir la stratégie de
+redistribution (perso vs licence OEM) dans
+[installer/redist/README.md](installer/redist/README.md).
 
 > `ISCC` = compilateur Inno Setup (`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`).

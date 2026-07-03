@@ -222,6 +222,25 @@ def update_settings():
         return jsonify({"status": "ok"})
     except Exception as e: return jsonify({"error": str(e)}), 500
 
+@app.route('/rename', methods=['POST'])
+def rename_device():
+    """Donne un nom personnalise a un appareil connu ({mac, name})."""
+    payload = request.json or {}
+    mac = payload.get('mac')
+    name = (payload.get('name') or '').strip()
+    if not mac or not name:
+        return jsonify({"error": "mac et name requis"}), 400
+    sec = SecurityMonitor()
+    if not sec.rename_device(mac, name):
+        return jsonify({"error": "MAC inconnue"}), 404
+    # Mise a jour memoire immediate pour reactivite client
+    for lst in (current_state["devices"], current_state["alerts"]):
+        for d in lst:
+            if d.get('mac') == mac:
+                d['custom_name'] = name
+    return jsonify({"status": "ok"})
+
+
 @app.route('/scan_now', methods=['POST'])
 def scan_now():
     """Declenche immediatement un cycle de scan (sans attendre l'intervalle)."""

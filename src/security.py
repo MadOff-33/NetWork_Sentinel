@@ -47,6 +47,14 @@ class SecurityMonitor:
             return True
         return False
 
+    def rename_device(self, mac, custom_name):
+        """Attribue un nom personnalisé (ex: iphone17_mike). Jamais écrasé par les scans."""
+        if mac in self.known_devices and custom_name and custom_name.strip():
+            self.known_devices[mac]['custom_name'] = custom_name.strip()
+            self._save_data()
+            return True
+        return False
+
     def analyze_intrusions(self, current_scan_results):
         new_devices = []
         known_list = []
@@ -60,6 +68,7 @@ class SecurityMonitor:
                 device_info = {
                     "ip": ip,
                     "mac": mac,
+                    "name": device.get("name", "Inconnu"),
                     "first_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "trusted": False,  # Doit être validé manuellement
@@ -71,9 +80,17 @@ class SecurityMonitor:
 
             # Cas 2 : Déjà vu
             else:
-                self.known_devices[mac]['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.known_devices[mac]['ip'] = ip
-                self.known_devices[mac]['mac'] = mac
+                entry = self.known_devices[mac]
+                entry['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                entry['ip'] = ip
+                entry['mac'] = mac
+                # Le nom issu du scan (hostname/fabricant) ne remplace le nom
+                # stocké que s'il apporte une vraie information.
+                # 'custom_name' (choisi par l'utilisateur) n'est JAMAIS touché.
+                scanned_name = device.get('name')
+                if scanned_name and scanned_name not in ("Inconnu", "?") \
+                        and entry.get('name') in (None, "", "Inconnu", "?"):
+                    entry['name'] = scanned_name
 
                 # Si l'appareil n'est pas "Trusted", il reste dans les "Nouveaux"
                 if not self.known_devices[mac].get('trusted', False):

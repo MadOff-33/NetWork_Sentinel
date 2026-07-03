@@ -64,6 +64,66 @@ def test_fichier_corrompu_ne_plante_pas(tmp_path):
     assert mon.known_devices == {}
 
 
+def test_le_nom_du_scan_est_conserve(tmp_path):
+    """Le nom resolu par le serveur (hostname/fabricant) doit etre stocke."""
+    mon = _monitor(tmp_path)
+    new, _ = mon.analyze_intrusions([{"ip": "10.0.0.7", "mac": "aa:bb:cc:dd:ee:07", "name": "iPhone-de-Mike"}])
+    assert new[0]["name"] == "iPhone-de-Mike"
+
+    # Persiste apres rechargement
+    mon2 = _monitor(tmp_path)
+    assert mon2.known_devices["aa:bb:cc:dd:ee:07"]["name"] == "iPhone-de-Mike"
+
+
+def test_un_meilleur_nom_remplace_inconnu(tmp_path):
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:08"
+    mon.analyze_intrusions([{"ip": "10.0.0.8", "mac": mac, "name": "Inconnu"}])
+    mon.analyze_intrusions([{"ip": "10.0.0.8", "mac": mac, "name": "(Apple, Inc.)"}])
+    assert mon.known_devices[mac]["name"] == "(Apple, Inc.)"
+
+
+def test_rename_device_persiste(tmp_path):
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:09"
+    mon.analyze_intrusions([{"ip": "10.0.0.9", "mac": mac}])
+    assert mon.rename_device(mac, "iphone17_mike") is True
+
+    mon2 = _monitor(tmp_path)
+    assert mon2.known_devices[mac]["custom_name"] == "iphone17_mike"
+
+
+def test_rename_mac_inconnue_retourne_false(tmp_path):
+    mon = _monitor(tmp_path)
+    assert mon.rename_device("00:00:00:00:00:99", "fantome") is False
+
+
+def test_custom_name_survit_aux_scans_suivants(tmp_path):
+    """Le nom personnalise ne doit JAMAIS etre ecrase par le scan."""
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:10"
+    mon.analyze_intrusions([{"ip": "10.0.0.10", "mac": mac, "name": "(Apple, Inc.)"}])
+    mon.rename_device(mac, "iphone17_mike")
+    mon.trust_device(mac)
+
+    _, known = mon.analyze_intrusions([{"ip": "10.0.0.10", "mac": mac, "name": "autre-hostname"}])
+    assert known[0]["custom_name"] == "iphone17_mike"
+
+
+def test_appareil_valide_ne_revient_jamais_en_intrus(tmp_path):
+    """Garantie demandee : une fois valide, plus jamais dans les intrus."""
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:11"
+    mon.analyze_intrusions([{"ip": "10.0.0.11", "mac": mac}])
+    mon.trust_device(mac)
+
+    # 50 scans plus tard, IP changee, nom change : toujours 'connu'
+    for i in range(50):
+        new, known = mon.analyze_intrusions([{"ip": f"10.0.0.{i + 20}", "mac": mac, "name": f"host{i}"}])
+        assert new == []
+        assert known[0]["mac"] == mac
+
+
 def test_anciens_appareils_sans_trusted_sont_approuves(tmp_path):
     # Retro-compatibilite : les bases d'avant l'ajout du champ 'trusted'
     path = tmp_path / "known_devices.json"

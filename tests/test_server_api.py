@@ -86,6 +86,37 @@ def test_update_settings_ecrit_la_config(monkeypatch, tmp_path):
     assert (tmp_path / "config.json").exists()
 
 
+def test_rename_sans_parametres_renvoie_400(monkeypatch, tmp_path):
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    assert client.post("/rename", json={}).status_code == 400
+    assert client.post("/rename", json={"mac": "aa:bb"}).status_code == 400
+    assert client.post("/rename", json={"name": "x"}).status_code == 400
+
+
+def test_rename_mac_inconnue_renvoie_404(monkeypatch, tmp_path):
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    r = client.post("/rename", json={"mac": "00:00:00:00:00:99", "name": "fantome"})
+    assert r.status_code == 404
+
+
+def test_rename_appareil_connu_ok(monkeypatch, tmp_path):
+    import json as jsonlib
+    # Prepare une base d'appareils dans le repertoire de travail du serveur
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "known_devices.json").write_text(jsonlib.dumps({
+        "aa:bb:cc:dd:ee:20": {"ip": "10.0.0.20", "trusted": True}
+    }))
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    r = client.post("/rename", json={"mac": "aa:bb:cc:dd:ee:20", "name": "iphone17_mike"})
+    assert r.status_code == 200
+    saved = jsonlib.loads((tmp_path / "data" / "known_devices.json").read_text())
+    assert saved["aa:bb:cc:dd:ee:20"]["custom_name"] == "iphone17_mike"
+
+
 def test_detect_ip_range_renvoie_un_slash_24(monkeypatch, tmp_path):
     srv = load_server(monkeypatch, tmp_path)
     assert srv.detect_ip_range().endswith(".0/24")

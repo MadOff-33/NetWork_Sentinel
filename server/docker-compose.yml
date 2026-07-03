@@ -1,0 +1,17 @@
+# Déploiement du serveur NetworkSentinel sur le NAS (Synology + Docker)
+# Reproduit la configuration du conteneur `network-sentinel` en production.
+#
+# Build & lancement :  docker compose up -d --build
+#
+# Le mode réseau "host" est REQUIS : le scan ARP (Scapy) doit voir
+# directement le réseau local, ce qui est impossible en réseau bridge.
+services:
+  network-sentinel:
+    build: .
+    image: network-sentinel:v1
+    container_name: network-sentinel
+    network_mode: host          # requis pour le scan ARP
+    restart: always
+    volumes:
+      - ./data:/app/data        # config.json, known_devices.json, network_history.csv
+    # Le serveur Flask écoute sur le port 5050 (host).

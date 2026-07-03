@@ -1,0 +1,25 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Build / distribution (exe PyInstaller = trop lourd pour git) ---
+build/
+dist/
+*.exe
+
+# --- Données personnelles (adresses MAC réelles, historique réseau) ---
+data/
+logs/
+
+# --- Secrets (mot de passe SMTP, token API) ---
+config.json
+client_config.json
+server/data/
+
+# --- Divers ---
+*.lnk
+.DS_Store
+Thumbs.db

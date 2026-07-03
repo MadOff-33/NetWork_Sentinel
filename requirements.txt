@@ -1,1 +1,12 @@
-# Fichier : requirements.txt
+customtkinter
+matplotlib
+pandas
+scapy
+speedtest-cli
+ping3
+pywin32
+winshell
+packaging
+pyinstaller
+
+# pip install -r requirements.txt pour lancer l'installation dev

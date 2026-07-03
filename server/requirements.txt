@@ -1,0 +1,8 @@
+flask
+scapy
+pandas
+speedtest-cli
+ping3
+colorama
+tabulate
+requests

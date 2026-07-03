@@ -8,6 +8,7 @@ venv/
 # --- Build / distribution (exe PyInstaller = trop lourd pour git) ---
 build/
 dist/
+installer/output/
 *.exe
 
 # --- Données personnelles (adresses MAC réelles, historique réseau) ---

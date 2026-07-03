@@ -17,10 +17,35 @@ from src.notifier import EmailNotifier
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-DATA_DIR = "/app/data"
+DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 HISTORY_FILE = os.path.join(DATA_DIR, "network_history.csv")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 VENDOR_CACHE = {}
+
+
+def detect_ip_range():
+    """Determine la plage /24 du reseau local en regardant quelle interface route vers Internet."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return ".".join(local_ip.split(".")[:3]) + ".0/24"
+    except OSError:
+        return "192.168.1.0/24"
+
+
+def get_ip_range():
+    """Plage IP a scanner : config.json (cle 'ip_range') sinon auto-detection."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE) as f:
+                configured = json.load(f).get("ip_range", "")
+                if configured:
+                    return configured
+        except (OSError, json.JSONDecodeError):
+            pass
+    return detect_ip_range()
 
 # État global avec initialisation des clés vitales
 current_state = {
@@ -73,7 +98,7 @@ def background_scan_loop():
             print(f"[INFO] Scan... ({interval}s)")
             
             # 1. SCAN
-            scanner = NetworkScanner("192.168.1.1/24")
+            scanner = NetworkScanner(get_ip_range())
             scan_res = scanner.scan()
             enriched_res = [resolve_details(d) for d in scan_res]
             

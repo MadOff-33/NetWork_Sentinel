@@ -99,9 +99,28 @@ class SecurityMonitor:
         return False
 
     def trust_device(self, mac):
-        """Valide un appareil comme étant sûr."""
+        """Valide un appareil comme étant sûr (et lève un éventuel blocage)."""
         if mac in self.known_devices:
             self.known_devices[mac]['trusted'] = True
+            self.known_devices[mac]['blocked'] = False
+            self._save_data()
+            return True
+        return False
+
+    def block_device(self, mac):
+        """Marque un appareil comme bloqué (non approuvé, signalé dans l'UI)."""
+        if mac in self.known_devices:
+            self.known_devices[mac]['blocked'] = True
+            self.known_devices[mac]['trusted'] = False
+            self._save_data()
+            log.info("Appareil bloque : %s", mac)
+            return True
+        return False
+
+    def unblock_device(self, mac):
+        """Lève le blocage d'un appareil (il redevient un intrus à trier)."""
+        if mac in self.known_devices:
+            self.known_devices[mac]['blocked'] = False
             self._save_data()
             return True
         return False

@@ -186,6 +186,55 @@ def test_link_device_mac_absente_retourne_false(tmp_path):
     assert mon.link_device("00:00:00:00:00:aa", "00:00:00:00:00:bb") is False
 
 
+def test_block_device_marque_bloque(tmp_path):
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:40"
+    mon.analyze_intrusions([{"ip": "10.0.0.40", "mac": mac}])
+    assert mon.block_device(mac) is True
+    assert mon.known_devices[mac]["blocked"] is True
+    assert mon.known_devices[mac]["trusted"] is False
+
+    # Persiste apres rechargement
+    mon2 = _monitor(tmp_path)
+    assert mon2.known_devices[mac]["blocked"] is True
+
+
+def test_appareil_bloque_reste_flague_dans_les_intrus(tmp_path):
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:41"
+    mon.analyze_intrusions([{"ip": "10.0.0.41", "mac": mac}])
+    mon.block_device(mac)
+    new, known = mon.analyze_intrusions([{"ip": "10.0.0.41", "mac": mac}])
+    # Toujours cote 'intrus' (pas approuve) mais explicitement bloque
+    assert any(d["mac"] == mac and d.get("blocked") for d in new)
+    assert all(d["mac"] != mac for d in known)
+
+
+def test_unblock_device(tmp_path):
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:42"
+    mon.analyze_intrusions([{"ip": "10.0.0.42", "mac": mac}])
+    mon.block_device(mac)
+    assert mon.unblock_device(mac) is True
+    assert mon.known_devices[mac]["blocked"] is False
+
+
+def test_block_mac_inconnue_retourne_false(tmp_path):
+    mon = _monitor(tmp_path)
+    assert mon.block_device("00:00:00:00:00:99") is False
+
+
+def test_valider_un_appareil_bloque_le_debloque(tmp_path):
+    """Valider (trust) doit lever le blocage, sinon etat incoherent."""
+    mon = _monitor(tmp_path)
+    mac = "aa:bb:cc:dd:ee:43"
+    mon.analyze_intrusions([{"ip": "10.0.0.43", "mac": mac}])
+    mon.block_device(mac)
+    mon.trust_device(mac)
+    assert mon.known_devices[mac]["trusted"] is True
+    assert mon.known_devices[mac]["blocked"] is False
+
+
 def test_anciens_appareils_sans_trusted_sont_approuves(tmp_path):
     # Retro-compatibilite : les bases d'avant l'ajout du champ 'trusted'
     path = tmp_path / "known_devices.json"

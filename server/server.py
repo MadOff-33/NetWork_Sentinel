@@ -161,8 +161,9 @@ def background_scan_loop():
                 try:
                     with open(CONFIG_FILE) as f: conf = json.load(f)
                     if conf.get("email_enabled"):
-                        # On filtre : on ne garde que ceux qui ne sont PAS dans la mémoire
-                        to_notify = [d for d in new_devs if d['mac'] not in alerted_macs]
+                        # On ne notifie pas les appareils déjà signalés ni les bloqués
+                        to_notify = [d for d in new_devs
+                                     if d['mac'] not in alerted_macs and not d.get('blocked')]
 
                         if to_notify:
                             notifier = EmailNotifier()
@@ -214,6 +215,37 @@ def authorize_device():
             return jsonify({"status": "ok"})
         except Exception as e: return jsonify({"error": str(e)}), 500
     return jsonify({"error": "No MAC"}), 400
+
+@app.route('/block', methods=['POST'])
+def block_device():
+    """Marque un appareil comme bloqué (statut affiché, sort du décompte d'intrus)."""
+    mac = (request.json or {}).get('mac')
+    if not mac:
+        return jsonify({"error": "No MAC"}), 400
+    sec = SecurityMonitor()
+    if not sec.block_device(mac):
+        return jsonify({"error": "MAC inconnue"}), 404
+    for d in current_state["alerts"]:
+        if d.get('mac') == mac:
+            d['blocked'] = True
+            d['trusted'] = False
+    return jsonify({"status": "ok"})
+
+
+@app.route('/unblock', methods=['POST'])
+def unblock_device():
+    """Lève le blocage : l'appareil redevient un intrus à trier."""
+    mac = (request.json or {}).get('mac')
+    if not mac:
+        return jsonify({"error": "No MAC"}), 400
+    sec = SecurityMonitor()
+    if not sec.unblock_device(mac):
+        return jsonify({"error": "MAC inconnue"}), 404
+    for d in current_state["alerts"]:
+        if d.get('mac') == mac:
+            d['blocked'] = False
+    return jsonify({"status": "ok"})
+
 
 @app.route('/update_settings', methods=['POST'])
 def update_settings():

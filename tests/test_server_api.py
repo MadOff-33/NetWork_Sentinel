@@ -141,6 +141,33 @@ def test_link_appareils_connus_ok(monkeypatch, tmp_path):
     assert saved["ff:ee:dd:cc:bb:31"]["custom_name"] == "iPhone de Mike"
 
 
+def test_block_sans_mac_renvoie_400(monkeypatch, tmp_path):
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    assert client.post("/block", json={}).status_code == 400
+
+
+def test_block_mac_inconnue_renvoie_404(monkeypatch, tmp_path):
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    assert client.post("/block", json={"mac": "00:00:00:00:00:99"}).status_code == 404
+
+
+def test_block_appareil_connu_persiste(monkeypatch, tmp_path):
+    import json as jsonlib
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "known_devices.json").write_text(jsonlib.dumps({
+        "aa:bb:cc:dd:ee:50": {"ip": "10.0.0.50", "trusted": False, "name": "galaxy-a12-1"}
+    }))
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    r = client.post("/block", json={"mac": "aa:bb:cc:dd:ee:50"})
+    assert r.status_code == 200
+    saved = jsonlib.loads((tmp_path / "data" / "known_devices.json").read_text())
+    assert saved["aa:bb:cc:dd:ee:50"]["blocked"] is True
+
+
 def test_detect_ip_range_renvoie_un_slash_24(monkeypatch, tmp_path):
     srv = load_server(monkeypatch, tmp_path)
     assert srv.detect_ip_range().endswith(".0/24")

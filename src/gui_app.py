@@ -203,11 +203,14 @@ class NetworkSentinelApp(ctk.CTk):
         alert_macs = [d['mac'] for d in alerts]
         known_devs = [d for d in all_devs if d['mac'] not in alert_macs]
 
+        # Un appareil bloqué n'est plus une alerte active (il a été traité)
+        active_alerts = [d for d in alerts if not d.get('blocked')]
+
         # Status
-        if alerts:
-            self.lbl_status.configure(text=f"⚠️ {len(alerts)} INTRUS !", text_color="red")
+        if active_alerts:
+            self.lbl_status.configure(text=f"⚠️ {len(active_alerts)} INTRUS !", text_color="red")
             self.device_tabs._segmented_button.configure(selected_color="#AA0000")
-            self._notify_new_intruders(alerts)
+            self._notify_new_intruders(active_alerts)
         else:
             self.lbl_status.configure(text=f"✅ Sécurisé (MàJ: {data.get('last_update', '?')})", text_color="#00ff88")
             self.device_tabs._segmented_button.configure(selected_color=["#3a7ebf", "#1f538d"])
@@ -236,10 +239,15 @@ class NetworkSentinelApp(ctk.CTk):
             ctk.CTkButton(row, text="💾", width=32, fg_color="#2a6",
                           command=lambda m=dev_mac, e=entry: self.save_name_inline(m, e)).pack(side="left", padx=2)
 
-            if is_new:
+            if is_new and dev.get('blocked'):
+                # Appareil bloqué : statut clair + possibilité de débloquer
+                ctk.CTkButton(row, text="DÉBLOQUER", fg_color="#555", width=90,
+                              command=lambda m=dev_mac: self.unblock_device(m)).pack(side="right", padx=3)
+                ctk.CTkLabel(row, text="🚫 BLOQUÉ", width=90, anchor="e",
+                             font=("Arial", 12, "bold"), text_color="#ff5555").pack(side="right", padx=3)
+            elif is_new:
                 ctk.CTkButton(row, text="BLOQUER", fg_color="#cc0000", width=75,
-                              command=lambda m=dev_mac: messagebox.showwarning(
-                                  "Bloquer", f"Ajoutez {m} à la liste noire de votre Box.")).pack(side="right", padx=3)
+                              command=lambda m=dev_mac: self.block_device(m)).pack(side="right", padx=3)
                 ctk.CTkButton(row, text="VALIDER", fg_color="green", width=75,
                               command=lambda m=dev_mac: self.authorize_device(m)).pack(side="right", padx=3)
 
@@ -321,6 +329,38 @@ class NetworkSentinelApp(ctk.CTk):
             self.after(500, self.run_audit_thread)
         except requests.RequestException as e:
             messagebox.showerror("Erreur", str(e))
+
+    def block_device(self, mac):
+        """Marque l'appareil bloqué sur le NAS + rappelle que le vrai blocage se fait sur la Box."""
+        def worker():
+            try:
+                r = self._api_post("/block", {"mac": mac})
+                if r.status_code == 200:
+                    self.after(0, lambda: messagebox.showinfo(
+                        "Bloqué",
+                        f"{mac} est marqué BLOQUÉ dans Network Sentinel.\n\n"
+                        "Rappel : le blocage réseau effectif se fait sur votre Box\n"
+                        "(liste noire / contrôle d'accès Wi-Fi)."))
+                    self.after(400, self.run_audit_thread)
+                elif r.status_code == 404:
+                    self.after(0, lambda: messagebox.showinfo(
+                        "Serveur à mettre à jour", "Le blocage nécessite le serveur v2 sur le NAS."))
+                else:
+                    self.after(0, lambda: messagebox.showwarning("Refusé", f"Réponse NAS : {r.status_code}"))
+            except requests.RequestException as e:
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showerror("Erreur", m))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def unblock_device(self, mac):
+        def worker():
+            try:
+                self._api_post("/unblock", {"mac": mac})
+                self.after(400, self.run_audit_thread)
+            except requests.RequestException as e:
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showerror("Erreur", m))
+        threading.Thread(target=worker, daemon=True).start()
 
     def save_name_inline(self, mac, entry):
         """Enregistre le nom saisi directement dans la ligne (onglet Intrus ou Connus)."""

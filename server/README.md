@@ -31,15 +31,50 @@ dans le dépôt — c'est désormais corrigé.
 ## Dépendance importante
 
 `server.py` importe les modules métier de `../src/`
-(`scanner`, `security`, `analyzer`, `notifier`). Pour builder l'image,
-le contexte Docker doit inclure ce dossier `src/`. En production, le conteneur
-embarque une copie de `src/` dans `/app/src`.
+(`scanner`, `security`, `analyzer`, `notifier`, `logger`). Le
+`docker-compose.yml` utilise donc **la racine du dépôt comme contexte de
+build** — c'est déjà configuré, ne buildez pas depuis `server/` avec
+`docker build .`.
 
-## Déploiement
+## Variables d'environnement
+
+| Variable | Rôle |
+|---|---|
+| `SMTP_PASSWORD` | Mot de passe d'application email (prioritaire sur config.json) |
+| `API_TOKEN` | Si défini, toutes les routes POST exigent le header `X-Auth-Token` |
+| `DATA_DIR` | Dossier de données (défaut `/app/data`) |
+
+## Déploiement initial
 
 ```bash
-docker compose up -d --build
+# Depuis le dossier server/ (le NAS doit avoir docker compose)
+SMTP_PASSWORD='xxxx' API_TOKEN='un-token-long-aleatoire' docker compose up -d --build
 ```
 
 Le mode `network_mode: host` est **obligatoire** : sans lui, le scan ARP
 (Scapy) ne voit pas le réseau local.
+
+## Mettre à jour le serveur du NAS (production actuelle)
+
+Le NAS fait tourner l'image `network-sentinel:v1` (ancienne, sans token ni
+scan à la demande). Pour passer à la version du dépôt :
+
+```bash
+# 1. Copier le depot sur le NAS (ex: /volume1/docker/NetworkSentinel-src)
+scp -r . Mike@192.168.1.100:/volume1/docker/NetworkSentinel-src
+
+# 2. Sur le NAS (ssh Mike@192.168.1.100) :
+cd /volume1/docker/NetworkSentinel-src
+sudo docker build -f server/Dockerfile -t network-sentinel:v2 .
+sudo docker stop network-sentinel && sudo docker rm network-sentinel
+sudo docker run -d --name network-sentinel --network host --restart always \
+     -v /volume1/docker/NetworkSentinel/data:/app/data \
+     -e SMTP_PASSWORD='mot-de-passe-application' \
+     -e API_TOKEN='un-token-long-aleatoire' \
+     network-sentinel:v2
+```
+
+Les données existantes (`known_devices.json`, historique) sont conservées :
+elles vivent dans le volume, pas dans l'image. Pensez ensuite à retirer
+`smtp_password` de `/volume1/docker/NetworkSentinel/data/config.json` et à
+reporter le token dans `client_config.json` côté PC.

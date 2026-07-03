@@ -9,7 +9,9 @@
 # directement le réseau local, ce qui est impossible en réseau bridge.
 services:
   network-sentinel:
-    build: .
+    build:
+      context: ..                    # racine du depot : server.py a besoin de src/
+      dockerfile: server/Dockerfile
     image: network-sentinel:v2
     container_name: network-sentinel
     network_mode: host          # requis pour le scan ARP

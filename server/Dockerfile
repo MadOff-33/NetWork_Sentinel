@@ -1,6 +1,10 @@
+# Image du serveur NetworkSentinel.
+# A builder depuis la RACINE du depot (le serveur importe src/) :
+#   docker build -f server/Dockerfile -t network-sentinel:v2 .
+# ou via server/docker-compose.yml (contexte deja configure).
 FROM python:3.9-slim
 
-# Installation des outils système nécessaires pour Scapy et le réseau
+# Outils systeme necessaires pour Scapy et le reseau
 RUN apt-get update && apt-get install -y \
     gcc \
     libpcap-dev \
@@ -10,10 +14,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY server/server.py .
+COPY src ./src
 
 # Lancement du serveur
 CMD ["python", "server.py"]

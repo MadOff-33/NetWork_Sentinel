@@ -101,11 +101,28 @@ ruff check .       # lint
   sur le NAS ; droits administrateur si exécution locale).
 - Cet outil est destiné à **votre propre réseau** uniquement.
 
-## 🛠️ Build de l'exe client (optionnel)
+## 🛠️ Builds & installeurs (optionnel)
 
+Deux produits packageables (binaires non versionnés, générés dans `dist/`) :
+
+### Client (pilote un NAS) — léger, sans admin
 ```bash
 pip install -r requirements-dev.txt
-pyinstaller NetworkSentinel.spec
+pyinstaller NetworkSentinel.spec                       # -> dist/NetworkSentinel.exe (~48 Mo)
+ISCC installer/installer.iss                           # -> installer/output/NetworkSentinel-Setup-*.exe
 ```
+Ne scanne pas lui-même (pas de Npcap ni de droits admin). Demande l'IP du NAS
+et le token à l'installation.
 
-L'exécutable est généré dans `dist/` (non versionné).
+### Édition autonome (tout sur le PC, sans NAS)
+```bash
+pyinstaller NetworkSentinelStandalone.spec             # -> dist/NetworkSentinelStandalone.exe (~54 Mo)
+ISCC installer/installer_standalone.iss                # -> installer/output/NetworkSentinel-Autonome-Setup-*.exe
+```
+Lance le serveur en interne sur `127.0.0.1` + l'interface. Voir
+[main_standalone.py](main_standalone.py). **Nécessite Npcap et les droits
+administrateur** (scan ARP local). L'installeur propose Npcap s'il est absent
+(placez son installeur dans `installer/redist/npcap-installer.exe` pour le
+bundler).
+
+> `ISCC` = compilateur Inno Setup (`C:\Program Files (x86)\Inno Setup 6\ISCC.exe`).

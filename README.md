@@ -50,6 +50,11 @@ NetworkSentinel/
 └── docs/                      # Plans et documentation
 ```
 
+## 📖 Guide d'utilisation
+
+Prise en main, réglages des appareils (MAC aléatoire) et rôle de chaque bouton :
+**[docs/GUIDE_UTILISATION.md](docs/GUIDE_UTILISATION.md)**.
+
 ## 🚀 Installation du client (PC)
 
 ```bash

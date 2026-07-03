@@ -38,6 +38,7 @@ class NetworkSentinelApp(ctk.CTk):
         self.auto_monitor_active = False
         self.nas_ip = "192.168.1.100"
         self.api_token = ""
+        self.notified_macs = set()  # intrus deja notifies (toast) cette session
         self.load_local_config()
 
         # --- GAUCHE ---
@@ -206,6 +207,7 @@ class NetworkSentinelApp(ctk.CTk):
         if alerts:
             self.lbl_status.configure(text=f"⚠️ {len(alerts)} INTRUS !", text_color="red")
             self.device_tabs._segmented_button.configure(selected_color="#AA0000")
+            self._notify_new_intruders(alerts)
         else:
             self.lbl_status.configure(text=f"✅ Sécurisé (MàJ: {data.get('last_update', '?')})", text_color="#00ff88")
             self.device_tabs._segmented_button.configure(selected_color=["#3a7ebf", "#1f538d"])
@@ -244,12 +246,48 @@ class NetworkSentinelApp(ctk.CTk):
         df = pd.DataFrame(data)
         self.ax.clear()
         self.ax.grid(True, linestyle='-', color='#555', alpha=0.5)
+
+        # Abscisse : vraies dates si disponibles, sinon index
+        x = df.index
+        if 'timestamp' in df.columns:
+            try:
+                x = pd.to_datetime(df['timestamp'])
+            except (ValueError, TypeError):
+                pass
+
         if 'download_mbps' in df.columns:
-            self.ax.plot(df.index, df['download_mbps'], label='Down', color='#00ff88')
-            self.ax.plot(df.index, df['upload_mbps'], label='Up', color='#00aaff')
+            self.ax.plot(x, df['download_mbps'], label='Down', color='#00ff88')
+            self.ax.plot(x, df['upload_mbps'], label='Up', color='#00aaff')
         self.ax.legend(loc='upper left', fontsize='small')
-        self.ax.tick_params(colors='white')
+        self.ax.tick_params(colors='white', labelsize=8)
+        for label in self.ax.get_xticklabels():
+            label.set_rotation(30)
+            label.set_horizontalalignment('right')
+        self.fig.tight_layout()
         self.canvas.draw()
+
+    def _notify_new_intruders(self, alerts):
+        """Notification Windows (balloon) pour les intrus pas encore signalés cette session."""
+        fresh = [d for d in alerts if d.get('mac') not in self.notified_macs]
+        if not fresh:
+            return
+        for d in fresh:
+            self.notified_macs.add(d.get('mac'))
+        try:
+            import subprocess
+            text = f"{len(fresh)} nouvel(s) appareil(s) inconnu(s) sur le réseau"
+            ps = ("Add-Type -AssemblyName System.Windows.Forms;"
+                  "Add-Type -AssemblyName System.Drawing;"
+                  "$n = New-Object System.Windows.Forms.NotifyIcon;"
+                  "$n.Icon = [System.Drawing.SystemIcons]::Warning;"
+                  "$n.Visible = $true;"
+                  f"$n.ShowBalloonTip(8000, 'Network Sentinel', '{text}',"
+                  "[System.Windows.Forms.ToolTipIcon]::Warning);"
+                  "Start-Sleep -Seconds 9; $n.Dispose()")
+            subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as e:
+            log.warning("Notification Windows impossible : %s", e)
 
     def request_nas_scan(self):
         """Demande au NAS de scanner immédiatement, puis rafraîchit 3 s plus tard."""

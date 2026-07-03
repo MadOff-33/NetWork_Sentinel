@@ -16,6 +16,21 @@ from src.notifier import EmailNotifier
 
 app = Flask(__name__)
 
+# Token d'authentification optionnel : si API_TOKEN est defini dans
+# l'environnement du conteneur, toutes les routes POST exigent le header
+# X-Auth-Token. Sans API_TOKEN, comportement historique (API ouverte LAN).
+API_TOKEN = os.environ.get("API_TOKEN", "")
+
+# Event permettant au client de declencher un scan immediat (/scan_now)
+scan_request = threading.Event()
+
+
+@app.before_request
+def check_token():
+    if API_TOKEN and request.method == "POST":
+        if request.headers.get("X-Auth-Token") != API_TOKEN:
+            return jsonify({"error": "Token invalide ou absent"}), 401
+
 # --- CONFIGURATION ---
 DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
 HISTORY_FILE = os.path.join(DATA_DIR, "network_history.csv")
@@ -79,6 +94,19 @@ def resolve_details(dev):
     dev['name'] = name
     return dev
 
+def trim_history(max_rows=20000, keep_rows=10000):
+    """Empeche le CSV d'historique de grossir sans limite."""
+    try:
+        if not os.path.exists(HISTORY_FILE):
+            return
+        df = pd.read_csv(HISTORY_FILE)
+        if len(df) > max_rows:
+            df.tail(keep_rows).to_csv(HISTORY_FILE, index=False)
+            print(f"[INFO] Historique tronque : {len(df)} -> {keep_rows} lignes")
+    except (OSError, pd.errors.ParserError) as e:
+        print(f"[ERREUR] Troncature historique : {e}")
+
+
 def background_scan_loop():
     if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
     
@@ -123,6 +151,7 @@ def background_scan_loop():
                     df['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S")
                     hdr = not os.path.exists(HISTORY_FILE)
                     df.to_csv(HISTORY_FILE, mode='a', header=hdr, index=False)
+                    trim_history()
                 except Exception as e: print(f"Perf Error: {e}")
             
             # 4. EMAIL
@@ -157,8 +186,10 @@ def background_scan_loop():
 
         except Exception as e:
             print(f"[ERREUR] {e}")
-        
-        time.sleep(interval)
+
+        # Attend l'intervalle OU un declenchement manuel via /scan_now
+        scan_request.wait(timeout=interval)
+        scan_request.clear()
 
 @app.route('/status', methods=['GET'])
 def get_status():
@@ -187,6 +218,13 @@ def update_settings():
         with open(CONFIG_FILE, 'w') as f: json.dump(request.json, f)
         return jsonify({"status": "ok"})
     except Exception as e: return jsonify({"error": str(e)}), 500
+
+@app.route('/scan_now', methods=['POST'])
+def scan_now():
+    """Declenche immediatement un cycle de scan (sans attendre l'intervalle)."""
+    scan_request.set()
+    return jsonify({"status": "scan demande"})
+
 
 @app.route('/history', methods=['GET'])
 def get_history():

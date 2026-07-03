@@ -49,6 +49,9 @@ class NetworkSentinelApp(ctk.CTk):
         self.btn_scan = ctk.CTkButton(self.sidebar, text="🔄 ACTUALISER", font=("Arial", 14, "bold"), height=45, fg_color="#0066cc", command=self.run_audit_thread)
         self.btn_scan.pack(pady=15, padx=20, fill="x")
 
+        self.btn_scan_now = ctk.CTkButton(self.sidebar, text="🔎 SCAN NAS IMMÉDIAT", height=35, fg_color="#444", command=self.request_nas_scan)
+        self.btn_scan_now.pack(pady=(0, 10), padx=20, fill="x")
+
         self.switch_auto = ctk.CTkSwitch(self.sidebar, text="Temps Réel (Auto)", command=self.toggle_monitoring)
         self.switch_auto.pack(pady=10)
 
@@ -245,6 +248,17 @@ class NetworkSentinelApp(ctk.CTk):
         self.ax.legend(loc='upper left', fontsize='small')
         self.ax.tick_params(colors='white')
         self.canvas.draw()
+
+    def request_nas_scan(self):
+        """Demande au NAS de scanner immédiatement, puis rafraîchit 3 s plus tard."""
+        def worker():
+            try:
+                self._api_post("/scan_now")
+                self.after(3000, self.run_audit_thread)
+            except requests.RequestException as e:
+                log.warning("Scan immediat impossible : %s", e)
+                self.after(0, lambda: self.lbl_status.configure(text="Scan NAS refusé", text_color="orange"))
+        threading.Thread(target=worker, daemon=True).start()
 
     def authorize_device(self, mac):
         try:

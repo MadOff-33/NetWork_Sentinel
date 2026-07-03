@@ -2,16 +2,25 @@
 # Reproduit la configuration du conteneur `network-sentinel` en production.
 #
 # Build & lancement :  docker compose up -d --build
+#   (le contexte de build doit contenir server.py, requirements.txt ET src/ —
+#    voir server/README.md, section "Mettre à jour le serveur")
 #
 # Le mode réseau "host" est REQUIS : le scan ARP (Scapy) doit voir
 # directement le réseau local, ce qui est impossible en réseau bridge.
 services:
   network-sentinel:
     build: .
-    image: network-sentinel:v1
+    image: network-sentinel:v2
     container_name: network-sentinel
     network_mode: host          # requis pour le scan ARP
     restart: always
     volumes:
       - ./data:/app/data        # config.json, known_devices.json, network_history.csv
+    environment:
+      # Mot de passe d'application SMTP — NE PAS le mettre dans config.json.
+      # Renseignez-le ici (ou via un fichier .env non versionné).
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # Token API optionnel : s'il est défini, toutes les routes POST
+      # exigent le header X-Auth-Token (à reporter dans client_config.json).
+      - API_TOKEN=${API_TOKEN:-}
     # Le serveur Flask écoute sur le port 5050 (host).

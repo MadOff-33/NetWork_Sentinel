@@ -222,23 +222,33 @@ class NetworkSentinelApp(ctk.CTk):
             row = ctk.CTkFrame(getattr(self, parent))
             row.pack(fill="x", pady=2)
 
+            dev_mac = dev.get('mac')
             # Priorité : nom choisi par l'utilisateur > nom résolu (hostname/fabricant)
             name = dev.get('custom_name') or dev.get('name') or 'Inconnu'
 
-            ctk.CTkLabel(row, text=dev.get('ip', '?'), width=110, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(row, text=dev.get('mac', '?'), width=130, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(row, text=str(name)[:25], width=180, anchor="w", font=("Arial", 12, "bold")).pack(side="left")
+            ctk.CTkLabel(row, text=dev.get('ip', '?'), width=100, anchor="w", font=("Consolas", 11)).pack(side="left", padx=3)
+            ctk.CTkLabel(row, text=dev_mac, width=125, anchor="w", font=("Consolas", 10)).pack(side="left", padx=3)
 
-            dev_mac = dev.get('mac')
-            ctk.CTkButton(row, text="✏️", width=32, fg_color="#333",
-                          command=lambda m=dev_mac, n=name: self.rename_device_dialog(m, n)).pack(side="right", padx=3)
+            # Saisie EN LIGNE du nom (les deux onglets) : pré-remplie, éditable
+            entry = ctk.CTkEntry(row, width=165)
+            entry.insert(0, str(name))
+            entry.pack(side="left", padx=3)
+            ctk.CTkButton(row, text="💾", width=32, fg_color="#2a6",
+                          command=lambda m=dev_mac, e=entry: self.save_name_inline(m, e)).pack(side="left", padx=2)
 
             if is_new:
-                ctk.CTkButton(row, text="BLOQUER", fg_color="#cc0000", width=80,
-                              command=lambda m=dev['mac']: messagebox.showwarning(
-                                  "Bloquer", f"Ajoutez {m} à la liste noire de votre Box.")).pack(side="right", padx=5)
-                ctk.CTkButton(row, text="VALIDER", fg_color="green", width=80,
-                              command=lambda m=dev['mac']: self.authorize_device(m)).pack(side="right", padx=5)
+                ctk.CTkButton(row, text="BLOQUER", fg_color="#cc0000", width=75,
+                              command=lambda m=dev_mac: messagebox.showwarning(
+                                  "Bloquer", f"Ajoutez {m} à la liste noire de votre Box.")).pack(side="right", padx=3)
+                ctk.CTkButton(row, text="VALIDER", fg_color="green", width=75,
+                              command=lambda m=dev_mac: self.authorize_device(m)).pack(side="right", padx=3)
+
+                # Suggestion de ré-identification (MAC aléatoire d'un appareil connu)
+                match = dev.get('suggested_match')
+                if match:
+                    ctk.CTkButton(row, text=f"💡 = {match['name'][:14]} ?", fg_color="#b8860b", width=150,
+                                  command=lambda m=dev_mac, s=match['mac'], n=match['name']:
+                                  self.confirm_reidentify(m, s, n)).pack(side="right", padx=3)
 
         for d in known_devs:
             add_line("known_list", d, False)
@@ -312,27 +322,53 @@ class NetworkSentinelApp(ctk.CTk):
         except requests.RequestException as e:
             messagebox.showerror("Erreur", str(e))
 
-    def rename_device_dialog(self, mac, current_name):
-        """Demande un nom personnalisé et l'enregistre sur le NAS."""
-        dialog = ctk.CTkInputDialog(title="Renommer l'appareil",
-                                    text=f"MAC : {mac}\nNom actuel : {current_name}\n\nNouveau nom :")
-        new_name = dialog.get_input()
-        if not new_name or not new_name.strip():
+    def save_name_inline(self, mac, entry):
+        """Enregistre le nom saisi directement dans la ligne (onglet Intrus ou Connus)."""
+        new_name = entry.get().strip()
+        if not new_name:
             return
 
         def worker():
             try:
-                r = self._api_post("/rename", {"mac": mac, "name": new_name.strip()})
+                r = self._api_post("/rename", {"mac": mac, "name": new_name})
                 if r.status_code == 200:
-                    self.after(300, self.run_audit_thread)
+                    self.after(0, lambda: self.lbl_status.configure(
+                        text=f"✅ « {new_name} » enregistré", text_color="#00ff88"))
+                    self.after(600, self.run_audit_thread)
                 elif r.status_code == 404 and "MAC inconnue" in r.text:
                     self.after(0, lambda: messagebox.showwarning(
                         "Introuvable", "Cet appareil n'est plus dans la base du NAS."))
                 elif r.status_code == 404:
-                    # Route absente : le NAS tourne encore avec l'ancien serveur (v1)
                     self.after(0, lambda: messagebox.showinfo(
                         "Serveur à mettre à jour",
                         "Le renommage nécessite le serveur v2 sur le NAS\n(voir server/README.md)."))
+                else:
+                    self.after(0, lambda: messagebox.showwarning("Refusé", f"Réponse NAS : {r.status_code}"))
+            except requests.RequestException as e:
+                msg = str(e)
+                self.after(0, lambda m=msg: messagebox.showerror("Erreur", m))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def confirm_reidentify(self, new_mac, source_mac, source_name):
+        """Confirme qu'un intrus est en réalité un appareil connu (MAC changée)."""
+        if not messagebox.askyesno(
+                "Ré-identification",
+                f"Confirmer que cet appareil est « {source_name} » ?\n\n"
+                f"Sa nouvelle adresse ({new_mac}) sera approuvée et prendra ce nom."):
+            return
+
+        def worker():
+            try:
+                r = self._api_post("/link", {"mac": new_mac, "source_mac": source_mac})
+                if r.status_code == 200:
+                    self.after(0, lambda: self.lbl_status.configure(
+                        text=f"✅ Rattaché à « {source_name} »", text_color="#00ff88"))
+                    self.after(600, self.run_audit_thread)
+                elif r.status_code == 404:
+                    self.after(0, lambda: messagebox.showinfo(
+                        "Serveur à mettre à jour",
+                        "La ré-identification nécessite le serveur v2 sur le NAS."))
                 else:
                     self.after(0, lambda: messagebox.showwarning("Refusé", f"Réponse NAS : {r.status_code}"))
             except requests.RequestException as e:

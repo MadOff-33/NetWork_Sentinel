@@ -117,6 +117,30 @@ def test_rename_appareil_connu_ok(monkeypatch, tmp_path):
     assert saved["aa:bb:cc:dd:ee:20"]["custom_name"] == "iphone17_mike"
 
 
+def test_link_sans_parametres_renvoie_400(monkeypatch, tmp_path):
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    assert client.post("/link", json={"mac": "aa:bb"}).status_code == 400
+    assert client.post("/link", json={"source_mac": "aa:bb"}).status_code == 400
+
+
+def test_link_appareils_connus_ok(monkeypatch, tmp_path):
+    import json as jsonlib
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "known_devices.json").write_text(jsonlib.dumps({
+        "aa:bb:cc:dd:ee:30": {"ip": "10.0.0.30", "trusted": True, "custom_name": "iPhone de Mike"},
+        "ff:ee:dd:cc:bb:31": {"ip": "10.0.0.31", "trusted": False, "name": "iphone-2"},
+    }))
+    srv = load_server(monkeypatch, tmp_path)
+    client = srv.app.test_client()
+    r = client.post("/link", json={"mac": "ff:ee:dd:cc:bb:31", "source_mac": "aa:bb:cc:dd:ee:30"})
+    assert r.status_code == 200
+    saved = jsonlib.loads((tmp_path / "data" / "known_devices.json").read_text())
+    assert saved["ff:ee:dd:cc:bb:31"]["trusted"] is True
+    assert saved["ff:ee:dd:cc:bb:31"]["custom_name"] == "iPhone de Mike"
+
+
 def test_detect_ip_range_renvoie_un_slash_24(monkeypatch, tmp_path):
     srv = load_server(monkeypatch, tmp_path)
     assert srv.detect_ip_range().endswith(".0/24")

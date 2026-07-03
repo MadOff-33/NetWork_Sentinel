@@ -124,6 +124,68 @@ def test_appareil_valide_ne_revient_jamais_en_intrus(tmp_path):
         assert known[0]["mac"] == mac
 
 
+def test_suggestion_reidentification_quand_nom_correspond(tmp_path):
+    """Une nouvelle MAC dont le nom correspond a un appareil de confiance
+    doit etre signalee comme probable re-identification."""
+    mon = _monitor(tmp_path)
+    # Appareil de confiance existant
+    mon.analyze_intrusions([{"ip": "10.0.0.20", "mac": "aa:bb:cc:00:00:01", "name": "galaxy-a12.home"}])
+    mon.trust_device("aa:bb:cc:00:00:01")
+    mon.rename_device("aa:bb:cc:00:00:01", "Galaxy de Mike")
+
+    # Nouvelle MAC (aleatoire) mais meme nom de base + suffixe DHCP
+    new, _ = mon.analyze_intrusions([{"ip": "10.0.0.99", "mac": "ff:ee:dd:00:00:02", "name": "galaxy-a12-1.home"}])
+    assert len(new) == 1
+    assert new[0].get("suggested_match") is not None
+    assert new[0]["suggested_match"]["mac"] == "aa:bb:cc:00:00:01"
+    assert new[0]["suggested_match"]["name"] == "Galaxy de Mike"
+
+
+def test_pas_de_suggestion_sans_correspondance(tmp_path):
+    mon = _monitor(tmp_path)
+    mon.analyze_intrusions([{"ip": "10.0.0.20", "mac": "aa:bb:cc:00:00:03", "name": "livebox.home"}])
+    mon.trust_device("aa:bb:cc:00:00:03")
+    new, _ = mon.analyze_intrusions([{"ip": "10.0.0.99", "mac": "ff:ee:dd:00:00:04", "name": "chromecast.home"}])
+    assert new[0].get("suggested_match") is None
+
+
+def test_pas_de_suggestion_vers_appareil_non_approuve(tmp_path):
+    """On ne suggere que des appareils DE CONFIANCE (sinon aucun interet)."""
+    mon = _monitor(tmp_path)
+    mon.analyze_intrusions([{"ip": "10.0.0.20", "mac": "aa:bb:cc:00:00:05", "name": "pc-mystere.home"}])
+    # non valide
+    new, _ = mon.analyze_intrusions([{"ip": "10.0.0.99", "mac": "ff:ee:dd:00:00:06", "name": "pc-mystere.home"}])
+    assert new[-1].get("suggested_match") is None
+
+
+def test_suggestion_non_persistee_sur_disque(tmp_path):
+    mon = _monitor(tmp_path)
+    mon.analyze_intrusions([{"ip": "10.0.0.20", "mac": "aa:bb:cc:00:00:07", "name": "nest.home"}])
+    mon.trust_device("aa:bb:cc:00:00:07")
+    mon.analyze_intrusions([{"ip": "10.0.0.99", "mac": "ff:ee:dd:00:00:08", "name": "nest-2.home"}])
+
+    raw = json.loads((tmp_path / "known_devices.json").read_text())
+    assert "suggested_match" not in raw["ff:ee:dd:00:00:08"]
+
+
+def test_link_device_copie_nom_et_approuve(tmp_path):
+    mon = _monitor(tmp_path)
+    mon.analyze_intrusions([{"ip": "10.0.0.20", "mac": "aa:bb:cc:00:00:09", "name": "x"}])
+    mon.trust_device("aa:bb:cc:00:00:09")
+    mon.rename_device("aa:bb:cc:00:00:09", "iPhone de Mike")
+    mon.analyze_intrusions([{"ip": "10.0.0.99", "mac": "ff:ee:dd:00:00:10", "name": "y"}])
+
+    assert mon.link_device("ff:ee:dd:00:00:10", "aa:bb:cc:00:00:09") is True
+    linked = mon.known_devices["ff:ee:dd:00:00:10"]
+    assert linked["trusted"] is True
+    assert linked["custom_name"] == "iPhone de Mike"
+
+
+def test_link_device_mac_absente_retourne_false(tmp_path):
+    mon = _monitor(tmp_path)
+    assert mon.link_device("00:00:00:00:00:aa", "00:00:00:00:00:bb") is False
+
+
 def test_anciens_appareils_sans_trusted_sont_approuves(tmp_path):
     # Retro-compatibilite : les bases d'avant l'ajout du champ 'trusted'
     path = tmp_path / "known_devices.json"

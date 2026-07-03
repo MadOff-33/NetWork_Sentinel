@@ -241,6 +241,30 @@ def rename_device():
     return jsonify({"status": "ok"})
 
 
+@app.route('/link', methods=['POST'])
+def link_device():
+    """Re-identification : confirme qu'une nouvelle MAC est un appareil connu.
+    Corps : {mac (nouvelle), source_mac (appareil de confiance existant)}."""
+    payload = request.json or {}
+    mac = payload.get('mac')
+    source_mac = payload.get('source_mac')
+    if not mac or not source_mac:
+        return jsonify({"error": "mac et source_mac requis"}), 400
+    sec = SecurityMonitor()
+    if not sec.link_device(mac, source_mac):
+        return jsonify({"error": "MAC inconnue"}), 404
+    # Sort l'appareil des alertes en memoire (reactivite client)
+    linked_name = sec._effective_name(sec.known_devices[mac])
+    for d in list(current_state["alerts"]):
+        if d.get('mac') == mac:
+            d['trusted'] = True
+            d['custom_name'] = linked_name
+            current_state["alerts"].remove(d)
+            if d not in current_state["devices"]:
+                current_state["devices"].append(d)
+    return jsonify({"status": "ok"})
+
+
 @app.route('/scan_now', methods=['POST'])
 def scan_now():
     """Declenche immediatement un cycle de scan (sans attendre l'intervalle)."""

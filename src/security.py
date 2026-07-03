@@ -3,11 +3,30 @@
 
 import json
 import os
+import re
 from datetime import datetime
 
 from src.logger import get_logger
 
 log = get_logger("security")
+
+# Champs calculés à la volée, jamais écrits dans known_devices.json
+_TRANSIENT_KEYS = ("suggested_match",)
+
+
+def _normalize_name(name):
+    """Ramene un nom reseau a sa racine comparable :
+    'Galaxy-A12-1.home' -> 'galaxy-a12'. Retourne '' si non significatif."""
+    if not name:
+        return ""
+    n = name.strip().lower()
+    for suffix in (".home", ".lan", ".local"):
+        if n.endswith(suffix):
+            n = n[:-len(suffix)]
+    n = re.sub(r"-\d+$", "", n)  # suffixe DHCP (-1, -2...)
+    if n in ("", "inconnu", "?"):
+        return ""
+    return n
 
 
 class SecurityMonitor:
@@ -34,10 +53,50 @@ class SecurityMonitor:
     def _save_data(self):
         try:
             os.makedirs(os.path.dirname(self.data_path) or ".", exist_ok=True)
+            # On retire les champs transitoires (suggestions) avant sauvegarde
+            clean = {
+                mac: {k: v for k, v in info.items() if k not in _TRANSIENT_KEYS}
+                for mac, info in self.known_devices.items()
+            }
             with open(self.data_path, 'w') as f:
-                json.dump(self.known_devices, f, indent=4)
+                json.dump(clean, f, indent=4)
         except OSError as e:
             log.error("Sauvegarde de %s impossible : %s", self.data_path, e)
+
+    @staticmethod
+    def _effective_name(entry):
+        """Nom affiché : personnalisé s'il existe, sinon nom résolu par le scan."""
+        return entry.get("custom_name") or entry.get("name") or ""
+
+    def _find_trusted_match(self, scanned_name, exclude_mac):
+        """Cherche un appareil DE CONFIANCE au même nom (MAC différente).
+        Retourne {'mac', 'name'} ou None. Sert à repérer les MAC aléatoires."""
+        target = _normalize_name(scanned_name)
+        if not target:
+            return None
+        for mac, entry in self.known_devices.items():
+            if mac == exclude_mac or not entry.get("trusted"):
+                continue
+            # On compare au hostname réseau d'origine ('name') ET au nom
+            # personnalisé : le hostname reste stable même après renommage.
+            candidates = {_normalize_name(entry.get("name")),
+                          _normalize_name(entry.get("custom_name"))}
+            if target in candidates and target:
+                return {"mac": mac, "name": self._effective_name(entry)}
+        return None
+
+    def link_device(self, new_mac, source_mac):
+        """Confirme qu'une nouvelle MAC est le même appareil que source_mac :
+        la nouvelle MAC devient de confiance et hérite du nom."""
+        if new_mac in self.known_devices and source_mac in self.known_devices:
+            name = self._effective_name(self.known_devices[source_mac])
+            self.known_devices[new_mac]['trusted'] = True
+            if name:
+                self.known_devices[new_mac]['custom_name'] = name
+            self._save_data()
+            log.info("Re-identification : %s rattache a %s (%s)", new_mac, source_mac, name)
+            return True
+        return False
 
     def trust_device(self, mac):
         """Valide un appareil comme étant sûr."""
@@ -75,6 +134,10 @@ class SecurityMonitor:
                     "status": "NEW"
                 }
                 self.known_devices[mac] = device_info
+                # Suggestion de re-identification (champ transitoire, non sauvegardé)
+                match = self._find_trusted_match(device.get("name"), exclude_mac=mac)
+                if match:
+                    device_info["suggested_match"] = match
                 new_devices.append(device_info)
                 log.info("Nouvel appareil detecte : %s (%s)", mac, ip)
 

@@ -1,0 +1,62 @@
+# =====================================================================
+# project_manifest.yaml — NetWork_Sentinel
+# Source de vérité pour la synchro Notion (Notion_Knowledge_OS).
+# AUCUN SECRET ICI. Chaque entité a une "key" stable.
+# =====================================================================
+id: network-sentinel
+name: NetWork_Sentinel
+description: >
+  Surveillance de réseau local 24h/24 : détection d'intrus (scan ARP),
+  scan de ports, mesure de performance, alertes email. Architecture en
+  deux moitiés : client GUI Windows (CustomTkinter) et serveur Flask
+  hébergé en Docker sur NAS Synology (HTTP :5050).
+status: active
+owner: Michael Introligator
+category: infra
+tags: [reseau, monitoring, securite, flask, synology]
+
+repo:
+  type: github
+  path: https://github.com/MadOff-33/NetWork_Sentinel
+  default_branch: master
+
+stack:
+  - Python 3.9+
+  - CustomTkinter (client GUI Windows)
+  - Flask (serveur NAS)
+  - Docker (Synology)
+  - matplotlib
+  - pandas
+  - requests
+
+launch_commands:
+  - python main.py                  # client GUI (pilote le serveur NAS)
+  - python main_standalone.py       # mode autonome sans NAS
+
+test_commands:
+  - pytest                          # tests/ (requirements-dev.txt)
+
+ai_modules: []
+
+resume_prompt: |
+  Tu reprends NetWork_Sentinel (surveillance réseau local : client GUI Windows
+  CustomTkinter + serveur Flask sur NAS Synology, HTTP :5050).
+  Commencer en LECTURE SEULE. Lire README.md avant toute action.
+  Ne jamais lancer de scan réseau réel sans GO explicite.
+  Jamais afficher de secret (config SMTP, client_config.json).
+  Proposer un plan court, modifier petit, montrer le diff, lancer pytest,
+  commit après validation.
+
+decisions: []
+
+risks: []
+
+sprints: []
+
+# Motifs de fichiers sensibles : PRÉSENCE détectée uniquement, contenu jamais lu.
+sensitive_files_hints:
+  - .env
+  - .env.bak_*
+  - client_config.json
+  - "*.pem"
+  - "*.key"
